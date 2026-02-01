@@ -48,7 +48,11 @@ A personal profile system for Claude sessions with `/me` to load context and `/r
 
 ```
 personal_memory/
-├── CLAUDE.md              # This file
+├── CLAUDE.md              # This file (project instructions for Claude)
+├── README.md              # Project overview and quick start
+├── docs/
+│   ├── research.md        # Analysis of existing memory implementations
+│   └── roadmap.md         # Future phases and features
 ├── templates/
 │   └── me.md              # Profile template
 └── src/                   # MCP server (TypeScript)
@@ -58,10 +62,8 @@ personal_memory/
         └── reflect.ts
 ```
 
-## Research References
+## Documentation
 
-- [Mem0](https://mem0.ai/) - Universal memory layer for AI
-- [Claude-Mem](https://github.com/thedotmack/claude-mem) - Claude Code memory plugin
-- [memory-mcp](https://dev.to/suede/the-architecture-of-persistent-memory-for-claude-code-17d) - Persistent memory architecture
-- [ChatGPT Memory Reverse Engineered](https://llmrefs.com/blog/reverse-engineering-chatgpt-memory)
-- [Claude vs ChatGPT Memory](https://simonwillison.net/2025/Sep/12/claude-memory/)
+- [README.md](README.md) - Quick start and usage
+- [docs/research.md](docs/research.md) - Research on Mem0, Claude-Mem, ChatGPT/Claude memory
+- [docs/roadmap.md](docs/roadmap.md) - Time-tiering, iCloud sync, Azure deployment plans
