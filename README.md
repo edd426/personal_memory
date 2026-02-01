@@ -1,10 +1,20 @@
 # Personal Memory
 
-A personal profile system for Claude sessions with `/me` to load context and `/reflect` to save learnings.
+Your identity shouldn't be locked inside one AI application.
 
-## Overview
+## Why This Exists
 
-Personal Memory solves the "Claude doesn't remember me" problem by maintaining a persistent profile (`me.md`) that can be loaded into any Claude session on demand.
+Claude.ai has memory, but it's trapped in a single interface. Meanwhile, many of us find ourselves living in Claude Code—it's more capable, more flexible, and handles complex workflows that the web and mobile apps simply can't. But Claude Code doesn't remember you between sessions.
+
+**Personal Memory fixes this.** It brings persistent memory to Claude Code through a simple MCP server.
+
+But the vision is bigger: **your personal profile should be portable.** Not locked to Claude.ai. Not locked to Claude Code. Not locked to any single AI tool. As MCP becomes the standard interface for AI applications, your identity, preferences, and context should follow you everywhere—to any tool, any interface, any agent that speaks MCP.
+
+This is step one: a human-readable `me.md` file that any MCP-compatible AI can load.
+
+---
+
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -18,19 +28,28 @@ Personal Memory solves the "Claude doesn't remember me" problem by maintaining a
 │  # Pet Peeves         - Things to avoid                     │
 └─────────────────────────────────────────────────────────────┘
            ▲                                    │
-           │ /reflect (writes)                  │ /me (reads)
+           │ reflect (writes)                   │ load_profile (reads)
            │                                    ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   Claude Session                            │
-│            (Claude Code or Claude.ai via MCP)               │
+│              Any MCP-Compatible AI Tool                     │
+│      (Claude Code, Claude.ai via connector, others)         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+- **`load_profile`**: Load your identity into the current session
+- **`reflect`**: Analyze the conversation and propose new facts to remember
+- **`save_to_profile`**: Save approved facts to your profile
+
+You control what gets saved. The AI proposes, you approve.
+
+---
+
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Install
 
 ```bash
+git clone https://github.com/edd426/personal_memory.git
 cd personal_memory
 npm install
 npm run build
@@ -55,66 +74,68 @@ Add to `~/.claude/.mcp.json`:
 
 ```bash
 cp templates/me.md ~/.claude/me.md
-# Edit ~/.claude/me.md with your information
+# Edit with your information, or use /reflect to build it over time
 ```
 
 ### 4. Use It
 
-- **Load profile**: Use the `load_profile` MCP tool (or `/me` skill when configured)
-- **Save learnings**: Use the `reflect` MCP tool after conversations
-- **Approve additions**: Each proposed fact requires your approval before saving
+Restart Claude Code. The MCP tools are now available:
+- Use `load_profile` to load your context
+- Use `reflect` after meaningful conversations to capture what was learned
 
-## MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `load_profile` | Reads `~/.claude/me.md` into session context |
-| `reflect` | Analyzes conversation, proposes additions for approval |
-| `save_to_profile` | Saves an approved fact to a specific section |
+---
 
 ## Profile Sections
 
 | Section | Purpose |
 |---------|---------|
 | **Identity** | Name, role, location, background |
-| **Current Focus** | Active projects, this week's priorities |
-| **Interests & Passions** | Topics you care about beyond work |
+| **Current Focus** | Active projects, current priorities |
+| **Interests & Passions** | What you care about beyond work |
 | **Goals** | Short-term and long-term objectives |
 | **Learned Facts** | Accumulated knowledge (grows over time) |
 | **Pet Peeves** | Things to avoid, anti-patterns |
 
+---
+
 ## Design Philosophy
 
-- **Explicit, not automatic**: You control when to load and save
-- **Human-readable**: Markdown file you can edit directly
-- **Privacy-first**: Profile stays local, never uploaded to repo
-- **Intentional reflection**: `/reflect` is a deliberate act, not background capture
+- **Portable**: Plain markdown file, not a proprietary format
+- **Explicit**: You choose when to load and save—no silent background capture
+- **Human-readable**: Edit your profile directly in any text editor
+- **Privacy-first**: Your profile stays local, never committed to repos
+- **MCP-native**: Works with any tool that supports the MCP protocol
 
-## Documentation
-
-- [Research](docs/research.md) - Analysis of existing memory implementations
-- [Roadmap](docs/roadmap.md) - Future phases and features
+---
 
 ## Roadmap
 
-| Phase | Features |
-|-------|----------|
-| **v1 (current)** | MCP server, markdown profile, manual commands |
-| **v2** | Time-tiering (Top of mind → Long-term) |
-| **v3** | iCloud sync |
-| **v4** | Azure deployment for Claude.ai mobile |
-| **v5** | Semantic search, confidence scoring, multi-profile |
+| Phase | Goal |
+|-------|------|
+| **v1 (current)** | MCP server for Claude Code |
+| **v2** | Time-tiering (Top of mind → Recent → Long-term) |
+| **v3** | iCloud sync across machines |
+| **v4** | Cloud deployment for Claude.ai mobile via MCP connector |
+| **v5** | Semantic search, confidence decay, multi-profile support |
+
+See [docs/roadmap.md](docs/roadmap.md) for details.
+
+---
+
+## Documentation
+
+- [docs/research.md](docs/research.md) - Analysis of ChatGPT memory, Claude.ai memory, Mem0, and other implementations
+- [docs/roadmap.md](docs/roadmap.md) - Future phases with implementation details
+
+---
 
 ## Related Projects
 
-This project was inspired by research into existing memory systems:
-
 - [Mem0](https://github.com/mem0ai/mem0) - Universal memory layer for AI
 - [Claude-Mem](https://github.com/thedotmack/claude-mem) - Claude Code memory plugin
-- [memory-mcp](https://dev.to/suede/the-architecture-of-persistent-memory-for-claude-code-17d) - Persistent memory architecture
-- [OpenMemory](https://github.com/CaviraOSS/OpenMemory) - Cognitive memory engine
+- [OpenMemory](https://github.com/CaviraOSS/OpenMemory) - Cognitive memory engine for LLMs
 
-See [docs/research.md](docs/research.md) for detailed analysis.
+---
 
 ## License
 
