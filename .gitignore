@@ -21,3 +21,10 @@ dist/
 
 # Claude local state
 .claude/
+
+# Personal data - NEVER commit
+me.md
+*memory*.json
+*memory*.md
+*export*.json
+*profile*.md
