@@ -408,6 +408,7 @@ async function handleProtectedResourceMetadata(
       resource: `${BASE_URL}/mcp`,
       authorization_servers: [BASE_URL],
       scopes_supported: [`api://${clientId}/mcp.profile.read`],
+      bearer_methods_supported: ["header"],
       resource_name: "Personal Memory MCP Server",
     },
   };
@@ -439,7 +440,8 @@ async function handleAuthorizationServerMetadata(
       issuer: BASE_URL,
       authorization_endpoint: `${BASE_URL}/authorize`,
       token_endpoint: `${BASE_URL}/token`,
-      token_endpoint_auth_methods_supported: ["client_secret_post"],
+      registration_endpoint: `${BASE_URL}/register`,
+      token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
@@ -456,6 +458,73 @@ async function healthCheck(): Promise<HttpResponseInit> {
       status: "healthy",
       version: "0.1.0",
       service: "personal-memory-mcp",
+    },
+  };
+}
+
+// RFC 7591: Dynamic Client Registration
+// Claude.ai needs to register itself as an OAuth client before starting the auth flow.
+// Since our proxy handles real Entra ID credentials, all registrations map to the same app.
+async function handleRegister(
+  request: HttpRequest,
+  context: InvocationContext
+): Promise<HttpResponseInit> {
+  const clientId = process.env.ENTRA_CLIENT_ID;
+
+  if (!clientId) {
+    return {
+      status: 500,
+      jsonBody: { error: "OAuth not configured" },
+    };
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return {
+      status: 400,
+      jsonBody: {
+        error: "invalid_client_metadata",
+        error_description: "Request body must be valid JSON",
+      },
+    };
+  }
+
+  // redirect_uris is required per RFC 7591
+  if (
+    !body.redirect_uris ||
+    !Array.isArray(body.redirect_uris) ||
+    body.redirect_uris.length === 0
+  ) {
+    return {
+      status: 400,
+      jsonBody: {
+        error: "invalid_client_metadata",
+        error_description: "redirect_uris is required and must be a non-empty array",
+      },
+    };
+  }
+
+  context.log(
+    `DCR: registering client "${body.client_name || "unnamed"}" with redirect_uris: ${JSON.stringify(body.redirect_uris)}`
+  );
+
+  return {
+    status: 201,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    jsonBody: {
+      client_id: clientId,
+      client_name: body.client_name || "MCP Client",
+      redirect_uris: body.redirect_uris,
+      grant_types: body.grant_types || ["authorization_code"],
+      response_types: body.response_types || ["code"],
+      token_endpoint_auth_method:
+        body.token_endpoint_auth_method || "none",
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      client_secret_expires_at: 0,
     },
   };
 }
@@ -617,6 +686,13 @@ app.http("health", {
 });
 
 // OAuth proxy endpoints
+app.http("register", {
+  methods: ["POST"],
+  authLevel: "anonymous",
+  route: "register",
+  handler: handleRegister,
+});
+
 app.http("authorize", {
   methods: ["GET"],
   authLevel: "anonymous",
