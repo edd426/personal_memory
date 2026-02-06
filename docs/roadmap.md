@@ -7,11 +7,11 @@ Future phases and features for the personal memory system.
 ## Current State (v1)
 
 **Implemented**:
-- MCP server with 3 tools (`load_profile`, `reflect`, `save_to_profile`)
+- MCP server with 4 tools (`load_profile`, `reflect`, `save_to_profile`, `remove_from_profile`)
 - Markdown profile at `~/.claude/me.md`
 - 6 sections: Identity, Current Focus, Interests, Goals, Learned Facts, Pet Peeves
 - Manual `/me` to load, `/reflect` to save
-- LLM proposes additions, user approves each
+- LLM proposes additions AND removals, user approves each
 
 **Design Decisions**:
 - Explicit commands only (no auto-capture)
@@ -21,9 +21,85 @@ Future phases and features for the personal memory system.
 
 ---
 
-## Phase 2: Time-Tiering
+## Phase 2: Cloud Deployment (Azure)
+
+**Goal**: Enable Claude.ai and mobile access via remote MCP server
+
+This is the priority feature - it unlocks `/me` and `/reflect` from Claude.ai web, iOS, and Android apps.
+
+### Architecture
+
+**Azure Functions + Blob Storage** (recommended):
+```
+Claude.ai / Mobile → Custom Connector → Azure Function (HTTP) → Blob Storage (me.md)
+```
+- Serverless, pay-per-use
+- Simple file read/write operations
+- Minimal code changes from local MCP server
+
+### Implementation Steps
+
+1. **Transport change**: Swap `StdioServerTransport` → HTTP request handler
+2. **Storage change**: `~/.claude/me.md` → Azure Blob Storage
+3. **Auth**: Start authless for testing, add OAuth later
+4. **Deploy**: Azure Functions with Node.js runtime
+
+### Claude.ai Integration
+
+- Add as Custom Connector: Settings → Connectors → Add custom connector
+- Enter Azure Function URL (HTTPS required)
+- Works on Pro, Max, Team, Enterprise plans
+- iOS/Android automatically get access to connectors added via web
+
+### Security Considerations
+- Encryption at rest (Azure provides this)
+- Start with authless + obscure URL for MVP
+- Add OAuth for production (Claude supports it natively)
+- Audit logging via Azure Monitor
+- No secrets stored in profile
+- Consider client-side encryption for sensitive facts
+
+### Risk Assessment
+- **Low risk to existing experience**: Local MCP server keeps working unchanged
+- **Additive feature**: Cloud deployment is a second access point, not a replacement
+
+---
+
+## Phase 3: iCloud Sync
+
+**Goal**: Profile accessible across multiple Macs (local Claude Code usage)
+
+Note: Once Phase 2 is complete, this becomes less critical since cloud storage handles cross-device access. Still useful for offline scenarios.
+
+### Implementation
+
+**Storage location**:
+```
+~/Library/Mobile Documents/com~apple~CloudDocs/claude-profile/me.md
+```
+
+**Symlink strategy**:
+```bash
+ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-profile/me.md ~/.claude/me.md
+```
+
+**Conflict handling**:
+- iCloud handles basic merge conflicts
+- Could add last-modified timestamps to detect stale reads
+- Consider append-only sections to minimize conflicts
+
+### Considerations
+- Mac-only (iCloud doesn't work on Linux/Windows)
+- Need to handle iCloud sync delays
+- Should we lock file during writes?
+
+---
+
+## Phase 4: Time-Tiering
 
 **Goal**: Add temporal organization like Claude.ai's memory structure
+
+**Deferred because**: Higher risk (modifies me.md structure), lower immediate value compared to cloud access.
 
 ### Features
 
@@ -52,77 +128,12 @@ Future phases and features for the personal memory system.
 2. **Separate metadata file**: `me.meta.json` tracks dates, `me.md` stays clean
 3. **YAML frontmatter**: Dates in frontmatter, content in body
 
+**Simpler alternative**: Just add dates to "Current Focus" items and prompt for cleanup during `/reflect` when items are stale (>14 days).
+
 ### Open Questions
 - How to detect "reinforcement" (mentioned in conversation)?
 - What triggers tier migration? Daily cron? Session start?
 - Should users be notified when items migrate?
-
----
-
-## Phase 3: iCloud Sync
-
-**Goal**: Profile accessible across multiple Macs
-
-### Implementation
-
-**Storage location**:
-```
-~/Library/Mobile Documents/com~apple~CloudDocs/claude-profile/me.md
-```
-
-**Symlink strategy**:
-```bash
-ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-profile/me.md ~/.claude/me.md
-```
-
-**Conflict handling**:
-- iCloud handles basic merge conflicts
-- Could add last-modified timestamps to detect stale reads
-- Consider append-only sections to minimize conflicts
-
-### Considerations
-- Mac-only (iCloud doesn't work on Linux/Windows)
-- Need to handle iCloud sync delays
-- Should we lock file during writes?
-
----
-
-## Phase 4: Cloud Deployment (Azure)
-
-**Goal**: Enable Claude.ai mobile access via MCP connector
-
-### Architecture Options
-
-**Option A: Azure Functions + Blob Storage**
-```
-Claude.ai Mobile → MCP Connector → Azure Function → Blob Storage (me.md)
-```
-- Serverless, pay-per-use
-- Simple file read/write operations
-- SAS tokens for authentication
-
-**Option B: Azure Container Apps**
-```
-Claude.ai Mobile → MCP Connector → Container App (MCP Server) → Blob Storage
-```
-- Persistent MCP server
-- More complex but maintains server state
-- Could cache profile in memory
-
-**Option C: Cloudflare Workers**
-```
-Claude.ai Mobile → MCP Connector → Cloudflare Worker → R2 Storage
-```
-- Edge deployment, low latency globally
-- Different development model (Workers runtime)
-- Potentially cheaper at scale
-
-### Security Considerations
-- Encryption at rest (Azure provides this)
-- SAS tokens with minimal permissions
-- Audit logging
-- No secrets stored in profile
-- Consider client-side encryption for sensitive facts
 
 ---
 
@@ -192,18 +203,24 @@ Profile could power personalized ranking:
 
 ## Implementation Priority
 
-Based on value vs complexity:
+Based on value vs complexity vs risk:
 
-| Priority | Feature | Value | Complexity |
-|----------|---------|-------|------------|
-| 1 | Time-tiering | High | Medium |
-| 2 | iCloud sync | High | Low |
-| 3 | Azure deployment | High | High |
-| 4 | Confidence scoring | Medium | Medium |
-| 5 | Semantic search | Medium | High |
-| 6 | Multi-profile | Medium | Medium |
-| 7 | Auto-reflection | Low | Low |
-| 8 | Versioning | Low | Medium |
+| Priority | Feature | Value | Complexity | Risk |
+|----------|---------|-------|------------|------|
+| 1 | Azure deployment | High | Medium | Low |
+| 2 | iCloud sync | Medium | Low | Low |
+| 3 | Time-tiering | Medium | Medium | High |
+| 4 | Confidence scoring | Medium | Medium | Medium |
+| 5 | Semantic search | Medium | High | Low |
+| 6 | Multi-profile | Medium | Medium | Low |
+| 7 | Auto-reflection | Low | Low | Low |
+| 8 | Versioning | Low | Medium | Low |
+
+**Why Azure first?**
+- Unlocks Claude.ai web + mobile access (high value)
+- Additive feature - local MCP keeps working (low risk)
+- Azure Functions + Blob Storage is straightforward (medium complexity)
+- Learning opportunity for Azure services
 
 ---
 

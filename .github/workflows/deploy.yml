@@ -1,0 +1,126 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write  # Required for OIDC
+  contents: read
+
+env:
+  AZURE_FUNCTIONAPP_NAME: func-personal-memory-prod
+  AZURE_RESOURCE_GROUP: rg-personal-memory-prod
+  NODE_VERSION: '20.x'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm test --if-present
+
+      - name: Upload artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: function-app
+          path: |
+            dist/
+            host.json
+            package.json
+            package-lock.json
+            node_modules/
+
+  deploy-infrastructure:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    # Only deploy infra if Bicep files changed
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.modified, 'infra/')
+    outputs:
+      functionAppName: ${{ steps.deploy.outputs.functionAppName }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Bicep
+        id: deploy
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: ./infra/main.bicep
+          parameters: >-
+            environment=prod
+            entraIdTenantId=${{ vars.ENTRA_TENANT_ID }}
+            entraIdClientId=${{ vars.ENTRA_CLIENT_ID }}
+            entraIdClientSecret=${{ secrets.ENTRA_CLIENT_SECRET }}
+          failOnStdErr: false
+
+  deploy-function:
+    runs-on: ubuntu-latest
+    needs: [build-and-test, deploy-infrastructure]
+    # Run even if deploy-infrastructure was skipped
+    if: always() && needs.build-and-test.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: function-app
+          path: ./deploy
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: ./deploy
+
+      - name: Health check
+        run: |
+          echo "Waiting for deployment to propagate..."
+          sleep 30
+
+          HEALTH_URL="https://${{ env.AZURE_FUNCTIONAPP_NAME }}.azurewebsites.net/health"
+          echo "Checking health at: $HEALTH_URL"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" "$HEALTH_URL")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response: $BODY"
+          echo "Status code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Health check failed!"
+            exit 1
+          fi
+
+          echo "Health check passed!"

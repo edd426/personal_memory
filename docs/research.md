@@ -157,6 +157,114 @@ Research conducted January 2025 on existing memory implementations for LLMs.
 
 ---
 
+### RLM-Claude (EncrEor/rlm-claude)
+
+**Links**:
+- [GitHub](https://github.com/EncrEor/rlm-claude)
+- Inspired by: [MIT CSAIL RLM Paper](https://arxiv.org/abs/2512.24601) (Dec 2025)
+
+**Overview**: "Recursive Language Models for Claude Code - Infinite memory solution"
+
+**Key Architecture**:
+```
+┌─────────────────────────┐
+│     Claude Code CLI     │
+└───────────┬─────────────┘
+            │
+┌───────────▼─────────────┐
+│    RLM MCP Server       │
+│    (14 tools)           │
+└───────────┬─────────────┘
+            │
+┌───────────┼───────────────────────┐
+│           │                       │
+▼           ▼                       ▼
+Insights    Chunks              Retention
+(decisions  (full conv          (auto-archive
+ facts)      history)            restore/purge)
+```
+
+**Two Memory Systems**:
+| System | What it stores | Tools |
+|--------|---------------|-------|
+| **Insights** | Key decisions, facts, preferences | `rlm_remember()` / `rlm_recall()` / `rlm_forget()` |
+| **Chunks** | Full conversation segments | `rlm_chunk()` / `rlm_peek()` / `rlm_grep()` / `rlm_search()` |
+
+**14 MCP Tools**:
+1. `rlm_remember` - Save insights with category/importance/tags
+2. `rlm_recall` - Search insights by keyword, category, importance
+3. `rlm_forget` - Remove an insight
+4. `rlm_status` - System overview and metrics
+5. `rlm_chunk` - Save conversation segments
+6. `rlm_peek` - Read a chunk (full or partial)
+7. `rlm_grep` - Regex search + fuzzy matching
+8. `rlm_search` - BM25 ranked search (FR/EN, accent-normalized)
+9. `rlm_list_chunks` - List all chunks with metadata
+10. `rlm_sessions` - Browse by project/domain
+11. `rlm_domains` - List available domains
+12. `rlm_retention_preview` - Dry-run archive preview
+13. `rlm_retention_run` - Archive old, purge ancient
+14. `rlm_restore` - Bring back archived chunks
+
+**Hooks Integration** (Auto-save before `/compact`):
+```json
+{
+  "hooks": {
+    "PreCompact": [{
+      "matcher": "manual",
+      "hooks": [{ "type": "command", "command": "python3 ~/.claude/rlm/hooks/pre_compact_chunk.py" }]
+    }]
+  }
+}
+```
+
+**Skill Definitions** (Slash commands):
+- `/rlm-analyze <chunk_id> "<question>"` - Analyze chunk with sub-agent
+- `/rlm-parallel` - Map-Reduce pattern from MIT RLM paper
+- Skills stored in `~/.claude/skills/rlm-analyze/skill.md`
+
+**Smart Retention Lifecycle**:
+```
+Active → Archive (.gz) → Purge
+```
+- Immunity system: critical tags, frequent access, keywords protect chunks
+
+**Standout Features**:
+1. **PreCompact hook** - Auto-snapshot before context is wiped
+2. **Multi-project support** - Cross-project filtering, auto-detection from git
+3. **BM25 + fuzzy search** - Typo-tolerant, FR/EN tokenization
+4. **3-zone retention** - Active/Archive/Purge lifecycle
+5. **Sub-agent skills** - Isolated analysis without context pollution
+6. **Zero config install** - 3 lines, `./install.sh`
+
+**Storage**:
+```
+context/
+├── session_memory.json    # Insights
+├── index.json             # Chunk index
+├── chunks/                # Full conversation history
+├── archive/               # Compressed .gz
+└── sessions.json          # Session index
+```
+
+**Comparison to Personal Memory**:
+| Aspect | RLM-Claude | Personal Memory |
+|--------|------------|-----------------|
+| Focus | Session/conversation memory | Personal identity/profile |
+| Storage | JSON + chunks | Markdown (me.md) |
+| Scope | Per-project | Cross-project (user-level) |
+| Automation | Auto-chunk on compact | Explicit /reflect only |
+| Complexity | 14 tools, hooks, skills | 3 tools, minimal |
+| Use case | Long coding sessions | Personal preferences/facts |
+
+**Potential Integration Ideas**:
+1. **Adopt hooks pattern** - PreCompact hook for auto-save
+2. **Skill definitions** - Use `~/.claude/skills/` for `/me` and `/reflect`
+3. **Retention system** - Time-based archival for stale profile items
+4. **BM25 search** - If profile grows large, add search capability
+
+---
+
 ## Key Insights for Personal Memory Project
 
 ### What We Adopted
@@ -173,6 +281,8 @@ Research conducted January 2025 on existing memory implementations for LLMs.
 3. **Graph relationships** (from Mem0) - connecting facts
 4. **Semantic search** (from Mem0/Claude-Mem) - vector embeddings
 5. **Confidence scoring** (from memory-mcp) - 0-1 scores per fact
+6. **Skill definitions** (from RLM-Claude) - `~/.claude/skills/` for slash commands
+7. **PreCompact hooks** (from RLM-Claude) - auto-save before context wipe
 
 ### Unique to Our Approach
 
@@ -180,3 +290,24 @@ Research conducted January 2025 on existing memory implementations for LLMs.
 2. **Portable markdown** - `me.md` can be manually edited, version-controlled
 3. **Intentional reflection** - `/reflect` is user-initiated, not automatic
 4. **Cross-platform vision** - designed for Claude.ai mobile from the start
+
+### Implementation Gap: Slash Commands
+
+RLM-Claude demonstrates how to implement `/command` style invocation:
+
+**Skill structure** (e.g., `~/.claude/skills/me/skill.md`):
+```markdown
+# /me
+
+Load personal profile into the current session.
+
+## Behavior
+
+Call `mcp__personal-memory__load_profile` to load ~/.claude/me.md
+
+## Usage
+
+Just type `/me` to load your profile context.
+```
+
+This would solve our missing `/me` and `/reflect` commands by creating skill definitions that wrap the MCP tools.

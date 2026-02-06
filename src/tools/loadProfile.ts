@@ -1,49 +1,47 @@
-import { readFile } from "fs/promises";
-import { existsSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import type { ProfileStorage } from "../storage/interface.js";
 
-const PROFILE_PATH = join(homedir(), ".claude", "me.md");
+export function createLoadProfile(storage: ProfileStorage) {
+  return async function loadProfile(userId?: string) {
+    try {
+      const exists = await storage.exists(userId);
+      if (!exists) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text:
+                `No profile found at ${storage.getLocation(userId)}\n\n` +
+                "To create one, copy the template from templates/me.md to ~/.claude/me.md " +
+                "and fill in your information.",
+            },
+          ],
+        };
+      }
 
-export async function loadProfile() {
-  try {
-    if (!existsSync(PROFILE_PATH)) {
+      const content = await storage.read(userId);
+
       return {
         content: [
           {
             type: "text" as const,
             text:
-              `No profile found at ${PROFILE_PATH}\n\n` +
-              "To create one, copy the template from templates/me.md to ~/.claude/me.md " +
-              "and fill in your information.",
+              "# Personal Profile Loaded\n\n" +
+              "The following profile has been loaded into context:\n\n" +
+              "---\n\n" +
+              content,
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error loading profile: ${message}`,
           },
         ],
       };
     }
-
-    const content = await readFile(PROFILE_PATH, "utf-8");
-
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text:
-            "# Personal Profile Loaded\n\n" +
-            "The following profile has been loaded into context:\n\n" +
-            "---\n\n" +
-            content,
-        },
-      ],
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Error loading profile: ${message}`,
-        },
-      ],
-    };
-  }
+  };
 }

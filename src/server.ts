@@ -6,8 +6,21 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { loadProfile } from "./tools/loadProfile.js";
-import { reflect, saveToProfile } from "./tools/reflect.js";
+import { createStorage } from "./storage/index.js";
+import { createLoadProfile } from "./tools/loadProfile.js";
+import {
+  createReflect,
+  createSaveToProfile,
+  createRemoveFromProfile,
+  type Section,
+} from "./tools/reflect.js";
+
+// Initialize storage and tools
+const storage = createStorage();
+const loadProfile = createLoadProfile(storage);
+const reflect = createReflect(storage);
+const saveToProfile = createSaveToProfile(storage);
+const removeFromProfile = createRemoveFromProfile(storage);
 
 const server = new Server(
   {
@@ -83,6 +96,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["section", "content"],
         },
       },
+      {
+        name: "remove_from_profile",
+        description:
+          "Remove a stale or outdated item from the profile. " +
+          "Use this after the user approves a proposed removal from reflect.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            line_content: {
+              type: "string",
+              description:
+                "The exact content of the line to remove (without the leading '- ' bullet point)",
+            },
+          },
+          required: ["line_content"],
+        },
+      },
     ],
   };
 });
@@ -122,10 +152,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
-      return await saveToProfile(
-        saveArgs.section as Parameters<typeof saveToProfile>[0],
-        saveArgs.content
-      );
+      return await saveToProfile(saveArgs.section as Section, saveArgs.content);
+
+    case "remove_from_profile":
+      const removeArgs = args as { line_content?: string };
+      if (!removeArgs.line_content) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: "Error: line_content is required",
+            },
+          ],
+        };
+      }
+      return await removeFromProfile(removeArgs.line_content);
 
     default:
       return {

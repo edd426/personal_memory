@@ -3,14 +3,20 @@
   "version": "0.1.0",
   "description": "MCP server for personal memory - /me and /reflect commands",
   "type": "module",
-  "main": "dist/server.js",
+  "main": "dist/azure/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "tsc --watch"
+    "start:azure": "func start",
+    "dev": "tsc --watch",
+    "test": "echo \"No tests yet\" && exit 0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@azure/functions": "^4.11.1",
+    "@azure/identity": "^4.13.0",
+    "@azure/storage-blob": "^12.30.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
