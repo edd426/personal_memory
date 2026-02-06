@@ -547,14 +547,13 @@ async function handleToken(
   tokenParams.set("client_id", clientId);
   tokenParams.set("client_secret", clientSecret);
 
-  // Forward relevant parameters from the original request
+  // Forward relevant parameters from the original request (except scope - we override)
   const forwardParams = [
     "grant_type",
     "code",
     "redirect_uri",
     "code_verifier",
     "refresh_token",
-    "scope",
   ];
 
   for (const param of forwardParams) {
@@ -564,7 +563,13 @@ async function handleToken(
     }
   }
 
-  context.log(`OAuth token request to Entra ID`);
+  // Always use our valid Entra ID scopes (Claude.ai sends 'claudeai' which Entra rejects)
+  tokenParams.set(
+    "scope",
+    `api://${clientId}/mcp.profile.read openid profile offline_access`
+  );
+
+  context.log(`OAuth token request to Entra ID, grant_type=${params.get("grant_type")}`);
 
   try {
     // Proxy the token request to Entra ID
