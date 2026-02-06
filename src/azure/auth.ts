@@ -94,7 +94,7 @@ export async function verifyToken(token: string): Promise<TokenClaims> {
   try {
     const { payload } = await jose.jwtVerify(token, jwks, {
       // Verify the token is for our application
-      audience: clientId,
+      audience: [clientId, `api://${clientId}`],
       // Don't verify issuer here - check manually for flexibility
     });
 

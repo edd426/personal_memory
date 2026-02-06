@@ -5,7 +5,11 @@
 set -e
 
 APP_NAME="Personal Memory MCP Server"
-REPLY_URL="https://oauth.pstmn.io/v1/callback" # Postman callback for testing
+REPLY_URLS=(
+  "https://oauth.pstmn.io/v1/callback"          # Postman callback for testing
+  "https://claude.ai/api/mcp/auth_callback"      # Claude.ai callback
+  "https://claude.com/api/mcp/auth_callback"     # Claude.com callback
+)
 
 echo "Creating Entra ID app registration: $APP_NAME"
 
@@ -13,7 +17,7 @@ echo "Creating Entra ID app registration: $APP_NAME"
 APP_RESULT=$(az ad app create \
   --display-name "$APP_NAME" \
   --sign-in-audience AzureADMyOrg \
-  --web-redirect-uris "$REPLY_URL" \
+  --web-redirect-uris "${REPLY_URLS[@]}" \
   --enable-id-token-issuance true \
   --enable-access-token-issuance true \
   --output json)
@@ -70,4 +74,3 @@ echo ""
 echo "Next steps:"
 echo "1. Update infra/main.bicepparam with the values above"
 echo "2. Deploy infrastructure: az deployment group create ..."
-echo "3. Add Claude.ai callback URL to app registration redirect URIs"

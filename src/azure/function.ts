@@ -436,9 +436,10 @@ async function handleAuthorizationServerMetadata(
       ...CORS_HEADERS,
     },
     jsonBody: {
-      issuer: `https://login.microsoftonline.com/${tenantId}/v2.0`,
+      issuer: BASE_URL,
       authorization_endpoint: `${BASE_URL}/authorize`,
       token_endpoint: `${BASE_URL}/token`,
+      token_endpoint_auth_methods_supported: ["client_secret_post"],
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
