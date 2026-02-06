@@ -65,6 +65,35 @@ Claude.ai / Mobile → Custom Connector → Azure Function (HTTP) → Blob Stora
 
 ---
 
+## Phase 2.5: Stability & Observability
+
+**Goal**: Make the deployed MCP server reliable and debuggable.
+
+### Error Messaging
+Currently tool errors surface as the generic "Error occurred during tool execution" in Claude.ai. We need:
+- Structured error responses with error codes, descriptions, and hints
+- Differentiate between auth errors, storage errors, timeout errors, and transport errors
+- Log all errors with request context to Application Insights
+- Surface actionable messages to the client (e.g., "Profile not found" vs "Storage unavailable")
+
+### SSE Timeout on Consumption Plan
+MCP Streamable HTTP uses long-lived SSE connections. Azure Functions Consumption plan has a **10-minute maximum** timeout. This causes intermittent failures when sessions exceed the timeout.
+
+**Options** (in order of preference):
+1. **Azure Container Apps** — supports long-running HTTP, scales to zero, ~same cost
+2. **Azure Functions Flex Consumption** — longer HTTP timeouts when available
+3. **Premium Functions plan** — 30-min default timeout, but always-on cost (~$100+/mo)
+4. **Stateless reconnection** — detect timeout, re-establish session transparently (complex)
+
+### Implementation Priority
+| Task | Effort | Impact |
+|------|--------|--------|
+| Better error messages in tool responses | Small | High |
+| Structured logging with App Insights | Small | High |
+| Evaluate Container Apps migration | Medium | High |
+
+---
+
 ## Phase 3: iCloud Sync
 
 **Goal**: Profile accessible across multiple Macs (local Claude Code usage)
