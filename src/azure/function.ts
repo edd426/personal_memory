@@ -406,9 +406,7 @@ async function handleProtectedResourceMetadata(
     },
     jsonBody: {
       resource: `${BASE_URL}/mcp`,
-      authorization_servers: [
-        `https://login.microsoftonline.com/${tenantId}/v2.0`,
-      ],
+      authorization_servers: [BASE_URL],
       scopes_supported: [`api://${clientId}/mcp.profile.read`],
       resource_name: "Personal Memory MCP Server",
     },
