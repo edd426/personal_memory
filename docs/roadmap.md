@@ -4,68 +4,48 @@ Future phases and features for the personal memory system.
 
 ---
 
-## Current State (v1)
+## Current State
 
 **Implemented**:
 - MCP server with 4 tools (`load_profile`, `reflect`, `save_to_profile`, `remove_from_profile`)
-- Markdown profile at `~/.claude/me.md`
+- Markdown profile stored in Azure Blob Storage (`profiles/{userId}/me.md`)
 - 6 sections: Identity, Current Focus, Interests, Goals, Learned Facts, Pet Peeves
 - Manual `/me` to load, `/reflect` to save
 - LLM proposes additions AND removals, user approves each
+- **Cloud deployment**: Azure Functions + Blob Storage with OAuth proxy to Entra ID
+- **Claude.ai connector**: Custom connector with DCR (RFC 7591), OAuth authorization code flow
+- **Claude Code**: Stdio server with Azure Blob Storage backend via `DefaultAzureCredential`
+- **Shared profile**: Both Claude.ai and Claude Code read/write the same cloud profile
+- Blob versioning enabled (automatic version history on every write)
 
 **Design Decisions**:
 - Explicit commands only (no auto-capture)
-- No metadata/timestamps in v1
+- No metadata/timestamps
 - Manual pruning (no decay)
-- Local storage only
+- Single profile per user (multi-tenant via Entra ID OID)
+
+**Architecture**:
+```
+Claude.ai / Mobile → Custom Connector → Azure Function (HTTP) → Blob Storage
+Claude Code         → stdio MCP server → DefaultAzureCredential → Blob Storage
+```
 
 ---
 
-## Phase 2: Cloud Deployment (Azure)
+## Completed: Cloud Deployment (Phase 2)
 
-**Goal**: Enable Claude.ai and mobile access via remote MCP server
-
-This is the priority feature - it unlocks `/me` and `/reflect` from Claude.ai web, iOS, and Android apps.
-
-### Architecture
-
-**Azure Functions + Blob Storage** (recommended):
-```
-Claude.ai / Mobile → Custom Connector → Azure Function (HTTP) → Blob Storage (me.md)
-```
-- Serverless, pay-per-use
-- Simple file read/write operations
-- Minimal code changes from local MCP server
-
-### Implementation Steps
-
-1. **Transport change**: Swap `StdioServerTransport` → HTTP request handler
-2. **Storage change**: `~/.claude/me.md` → Azure Blob Storage
-3. **Auth**: Start authless for testing, add OAuth later
-4. **Deploy**: Azure Functions with Node.js runtime
-
-### Claude.ai Integration
-
-- Add as Custom Connector: Settings → Connectors → Add custom connector
-- Enter Azure Function URL (HTTPS required)
-- Works on Pro, Max, Team, Enterprise plans
-- iOS/Android automatically get access to connectors added via web
-
-### Security Considerations
-- Encryption at rest (Azure provides this)
-- Start with authless + obscure URL for MVP
-- Add OAuth for production (Claude supports it natively)
-- Audit logging via Azure Monitor
-- No secrets stored in profile
-- Consider client-side encryption for sensitive facts
-
-### Risk Assessment
-- **Low risk to existing experience**: Local MCP server keeps working unchanged
-- **Additive feature**: Cloud deployment is a second access point, not a replacement
+Delivered Feb 2026. Key milestones:
+- Azure Functions + Blob Storage infrastructure (Bicep IaC)
+- OAuth proxy (authorize, token endpoints) to Azure Entra ID
+- Dynamic Client Registration (RFC 7591) for Claude.ai
+- Claude.ai custom connector working (load, reflect, save, remove)
+- Claude Code switched from local file to Azure Blob Storage
+- Managed identity for Functions → Storage access (RBAC)
+- GitHub Actions CI/CD with OIDC authentication
 
 ---
 
-## Phase 2.5: Stability & Observability
+## Phase 2: Stability & Observability
 
 **Goal**: Make the deployed MCP server reliable and debuggable.
 
@@ -94,33 +74,25 @@ MCP Streamable HTTP uses long-lived SSE connections. Azure Functions Consumption
 
 ---
 
-## Phase 3: iCloud Sync
+## Phase 3: Profile Versioning
 
-**Goal**: Profile accessible across multiple Macs (local Claude Code usage)
+**Goal**: Let users view and restore previous versions of their profile.
 
-Note: Once Phase 2 is complete, this becomes less critical since cloud storage handles cross-device access. Still useful for offline scenarios.
+Azure Blob Storage versioning is already enabled (`isVersioningEnabled: true` in Bicep), so every write to `me.md` automatically creates a new version. The infrastructure is in place — we just need to surface it.
+
+### Features
+- New tool: `profile_history` — list recent versions with timestamps and size
+- New tool: `restore_profile` — restore a specific version by version ID
+- Diff view: show what changed between versions (useful after `/reflect`)
 
 ### Implementation
+- Use `BlobClient.listBlobVersions()` from `@azure/storage-blob` SDK
+- Each version has a `versionId` (timestamp-based) and metadata
+- Restore = copy a specific version to the current blob
 
-**Storage location**:
-```
-~/Library/Mobile Documents/com~apple~CloudDocs/claude-profile/me.md
-```
-
-**Symlink strategy**:
-```bash
-ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-profile/me.md ~/.claude/me.md
-```
-
-**Conflict handling**:
-- iCloud handles basic merge conflicts
-- Could add last-modified timestamps to detect stale reads
-- Consider append-only sections to minimize conflicts
-
-### Considerations
-- Mac-only (iCloud doesn't work on Linux/Windows)
-- Need to handle iCloud sync delays
-- Should we lock file during writes?
+### Open Questions
+- How many versions to show by default? (last 10? last 30 days?)
+- Should `/reflect` show a diff of what it changed?
 
 ---
 
@@ -128,7 +100,7 @@ ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-profile/me.md ~/.cl
 
 **Goal**: Add temporal organization like Claude.ai's memory structure
 
-**Deferred because**: Higher risk (modifies me.md structure), lower immediate value compared to cloud access.
+**Deferred because**: Higher risk (modifies me.md structure), lower immediate value compared to stability and versioning.
 
 ### Features
 
@@ -172,7 +144,7 @@ ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-profile/me.md ~/.cl
 - Embed "Learned Facts" entries
 - "What did I say about X?" queries
 - Cluster related learnings
-- Implementation: Chroma, Pinecone, or Azure AI Search
+- Implementation: Azure AI Search
 
 ### Confidence Scoring
 - Each fact gets a 0-1 confidence score
@@ -186,12 +158,6 @@ ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/claude-profile/me.md ~/.cl
 - Claude summarizes what was learned
 - User reviews before committing
 - Could be opt-in via `/reflect-on-exit` toggle
-
-### Profile Versioning
-- Git-like history of changes
-- "What did my profile look like 3 months ago?"
-- Rollback capability
-- Implementation: simple git repo, or append-only changelog
 
 ### Multi-Profile Support
 - Work vs personal contexts
@@ -236,20 +202,14 @@ Based on value vs complexity vs risk:
 
 | Priority | Feature | Value | Complexity | Risk |
 |----------|---------|-------|------------|------|
-| 1 | Azure deployment | High | Medium | Low |
-| 2 | iCloud sync | Medium | Low | Low |
-| 3 | Time-tiering | Medium | Medium | High |
-| 4 | Confidence scoring | Medium | Medium | Medium |
-| 5 | Semantic search | Medium | High | Low |
-| 6 | Multi-profile | Medium | Medium | Low |
-| 7 | Auto-reflection | Low | Low | Low |
-| 8 | Versioning | Low | Medium | Low |
-
-**Why Azure first?**
-- Unlocks Claude.ai web + mobile access (high value)
-- Additive feature - local MCP keeps working (low risk)
-- Azure Functions + Blob Storage is straightforward (medium complexity)
-- Learning opportunity for Azure services
+| 1 | Error messaging & logging | High | Low | Low |
+| 2 | Container Apps evaluation | High | Medium | Low |
+| 3 | Profile versioning | Medium | Low | Low |
+| 4 | Time-tiering | Medium | Medium | High |
+| 5 | Confidence scoring | Medium | Medium | Medium |
+| 6 | Semantic search | Medium | High | Low |
+| 7 | Multi-profile | Medium | Medium | Low |
+| 8 | Auto-reflection | Low | Low | Low |
 
 ---
 
@@ -258,6 +218,5 @@ Based on value vs complexity vs risk:
 1. **Granularity**: Should "Learned Facts" be categorized (work, personal, technical)?
 2. **Privacy levels**: Some facts are shareable, others are private?
 3. **Source tracking**: Note which project/session a learning came from?
-4. **Conflict resolution**: What if mobile and desktop edits conflict?
-5. **Export format**: Should we support exporting to other memory systems?
-6. **Import from Claude.ai**: Periodic sync from Claude.ai's native memory?
+4. **Export format**: Should we support exporting to other memory systems?
+5. **Import from Claude.ai**: Periodic sync from Claude.ai's native memory?

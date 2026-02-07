@@ -17,6 +17,7 @@ import {
 
 // Initialize storage and tools
 const storage = createStorage();
+const userId = process.env.PERSONAL_MEMORY_USER_ID;
 const loadProfile = createLoadProfile(storage);
 const reflect = createReflect(storage);
 const saveToProfile = createSaveToProfile(storage);
@@ -123,7 +124,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   switch (name) {
     case "load_profile":
-      return await loadProfile();
+      return await loadProfile(userId);
 
     case "reflect":
       const summary = (args as { conversation_summary?: string })
@@ -138,7 +139,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
-      return await reflect(summary);
+      return await reflect(summary, userId);
 
     case "save_to_profile":
       const saveArgs = args as { section?: string; content?: string };
@@ -152,7 +153,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
-      return await saveToProfile(saveArgs.section as Section, saveArgs.content);
+      return await saveToProfile(saveArgs.section as Section, saveArgs.content, userId);
 
     case "remove_from_profile":
       const removeArgs = args as { line_content?: string };
@@ -166,7 +167,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
       }
-      return await removeFromProfile(removeArgs.line_content);
+      return await removeFromProfile(removeArgs.line_content, userId);
 
     default:
       return {
@@ -182,9 +183,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start the server
 async function main() {
+  const isAzureStorage = !!(
+    process.env.AZURE_STORAGE_ACCOUNT_URL ||
+    process.env.AZURE_STORAGE_CONNECTION_STRING
+  );
+
+  if (isAzureStorage && !userId) {
+    console.error(
+      "Error: PERSONAL_MEMORY_USER_ID is required when using Azure Blob Storage.\n" +
+        "Set it in ~/.claude/.mcp.json under env, or export it in your shell."
+    );
+    process.exit(1);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Personal Memory MCP server running on stdio");
+
+  if (isAzureStorage) {
+    console.error(
+      `Personal Memory MCP server running on stdio (Azure Blob Storage, user: ${userId!.slice(0, 8)}...)`
+    );
+  } else {
+    console.error(
+      "Personal Memory MCP server running on stdio (local storage: ~/.claude/me.md)"
+    );
+  }
 }
 
 main().catch(console.error);
