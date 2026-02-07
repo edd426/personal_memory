@@ -471,6 +471,18 @@ async function handleAuthorize(
   const url = new URL(request.url);
   const params = new URLSearchParams(url.search);
 
+  // Validate redirect_uri against allowlist
+  const redirectUri = params.get("redirect_uri");
+  if (redirectUri && !redirectUri.startsWith("https://claude.ai/")) {
+    return {
+      status: 400,
+      jsonBody: {
+        error: "invalid_request",
+        error_description: "redirect_uri not allowed",
+      },
+    };
+  }
+
   // Build Entra ID authorize URL with Claude.ai's parameters
   const entraAuthorizeUrl = new URL(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`

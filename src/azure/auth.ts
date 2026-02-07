@@ -65,23 +65,6 @@ async function getJWKS(tenantId: string): Promise<jose.JWTVerifyGetKey> {
  * @throws If the token is invalid, expired, or from wrong issuer/audience
  */
 export async function verifyToken(token: string): Promise<TokenClaims> {
-  // Allow bypass in development mode
-  if (
-    process.env.AZURE_FUNCTIONS_ENVIRONMENT === "Development" &&
-    token === "dev-token"
-  ) {
-    return {
-      oid: "dev-user-id",
-      sub: "dev-user-id",
-      aud: "local-dev",
-      iss: "local-dev",
-      tid: "local-dev",
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      iat: Math.floor(Date.now() / 1000),
-      name: "Developer",
-    };
-  }
-
   const { tenantId, clientId } = getEntraConfig();
   const jwks = await getJWKS(tenantId);
 
@@ -93,16 +76,9 @@ export async function verifyToken(token: string): Promise<TokenClaims> {
 
   try {
     const { payload } = await jose.jwtVerify(token, jwks, {
-      // Verify the token is for our application
       audience: [clientId, `api://${clientId}`],
-      // Don't verify issuer here - check manually for flexibility
+      issuer: validIssuers,
     });
-
-    // Manually check issuer (Entra ID uses different formats)
-    const issuer = payload.iss as string;
-    if (!validIssuers.some((valid) => issuer.startsWith(valid.replace("/v2.0", "")))) {
-      throw new Error(`Invalid issuer: ${issuer}`);
-    }
 
     // Validate required claims
     if (!payload.oid || typeof payload.oid !== "string") {
@@ -113,7 +89,7 @@ export async function verifyToken(token: string): Promise<TokenClaims> {
       oid: payload.oid as string,
       sub: payload.sub as string,
       aud: payload.aud as string,
-      iss: issuer,
+      iss: payload.iss as string,
       tid: (payload.tid as string) || tenantId,
       exp: payload.exp as number,
       iat: payload.iat as number,

@@ -15,7 +15,7 @@
     "@azure/functions": "^4.11.1",
     "@azure/identity": "^4.13.0",
     "@azure/storage-blob": "^12.30.0",
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "1.25.3",
     "jose": "^5.10.0"
   },
   "devDependencies": {
