@@ -56,21 +56,11 @@ Currently tool errors surface as the generic "Error occurred during tool executi
 - Log all errors with request context to Application Insights
 - Surface actionable messages to the client (e.g., "Profile not found" vs "Storage unavailable")
 
-### SSE Timeout on Consumption Plan
-MCP Streamable HTTP uses long-lived SSE connections. Azure Functions Consumption plan has a **10-minute maximum** timeout. This causes intermittent failures when sessions exceed the timeout.
-
-**Options** (in order of preference):
-1. **Azure Container Apps** — supports long-running HTTP, scales to zero, ~same cost
-2. **Azure Functions Flex Consumption** — longer HTTP timeouts when available
-3. **Premium Functions plan** — 30-min default timeout, but always-on cost (~$100+/mo)
-4. **Stateless reconnection** — detect timeout, re-establish session transparently (complex)
-
 ### Implementation Priority
 | Task | Effort | Impact |
 |------|--------|--------|
 | Better error messages in tool responses | Small | High |
 | Structured logging with App Insights | Small | High |
-| Evaluate Container Apps migration | Medium | High |
 
 ---
 
@@ -203,13 +193,12 @@ Based on value vs complexity vs risk:
 | Priority | Feature | Value | Complexity | Risk |
 |----------|---------|-------|------------|------|
 | 1 | Error messaging & logging | High | Low | Low |
-| 2 | Container Apps evaluation | High | Medium | Low |
-| 3 | Profile versioning | Medium | Low | Low |
-| 4 | Time-tiering | Medium | Medium | High |
-| 5 | Confidence scoring | Medium | Medium | Medium |
-| 6 | Semantic search | Medium | High | Low |
-| 7 | Multi-profile | Medium | Medium | Low |
-| 8 | Auto-reflection | Low | Low | Low |
+| 2 | Profile versioning | Medium | Low | Low |
+| 3 | Time-tiering | Medium | Medium | High |
+| 4 | Confidence scoring | Medium | Medium | Medium |
+| 5 | Semantic search | Medium | High | Low |
+| 6 | Multi-profile | Medium | Medium | Low |
+| 7 | Auto-reflection | Low | Low | Low |
 
 ---
 

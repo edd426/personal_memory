@@ -35,29 +35,6 @@ const reflect = createReflect(storage);
 const saveToProfile = createSaveToProfile(storage);
 const removeFromProfile = createRemoveFromProfile(storage);
 
-// Store transports by session ID for stateful sessions
-const sessions = new Map<
-  string,
-  {
-    transport: WebStandardStreamableHTTPServerTransport;
-    server: Server;
-    userId: string;
-    createdAt: number;
-  }
->();
-
-// Clean up old sessions periodically
-const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [sessionId, session] of sessions) {
-    if (now - session.createdAt > SESSION_TTL_MS) {
-      session.transport.close();
-      sessions.delete(sessionId);
-    }
-  }
-}, 60 * 1000); // Check every minute
-
 function createMCPServerWithUserId(userId: string) {
   const server = new Server(
     {
@@ -221,19 +198,6 @@ function createMCPServerWithUserId(userId: string) {
     }
   });
 
-  // After initialization, notify client that tools are available.
-  // Works around claude.ai bug where it never calls tools/list.
-  server.oninitialized = () => {
-    const sendWithRetry = (attempts: number) => {
-      server.sendToolListChanged().catch((err) => {
-        if (attempts > 0) {
-          setTimeout(() => sendWithRetry(attempts - 1), 500);
-        }
-      });
-    };
-    setTimeout(() => sendWithRetry(3), 100);
-  };
-
   return server;
 }
 
@@ -271,54 +235,22 @@ async function handleMCPRequest(
     };
   }
 
-  // Convert Azure Functions HttpRequest to web standard Request
+  // Stateless mode: create a fresh transport and server per request.
+  // No sessions, no SSE streams, no timeout issues.
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  const server = createMCPServerWithUserId(userId);
+  await server.connect(transport);
+
   const webRequest = toWebRequest(request);
+  const webResponse = await transport.handleRequest(webRequest);
 
-  // Check for existing session
-  const sessionId = request.headers.get("mcp-session-id");
-  let session = sessionId ? sessions.get(sessionId) : undefined;
+  await transport.close();
+  await server.close();
 
-  // If session exists but belongs to different user, reject
-  if (session && session.userId !== userId) {
-    return {
-      status: 403,
-      jsonBody: { error: "Session belongs to different user" },
-    };
-  }
-
-  // Create new session if needed
-  if (!session) {
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
-    });
-
-    const server = createMCPServerWithUserId(userId);
-    await server.connect(transport);
-
-    // We'll store the session after the first request creates a session ID
-    transport.onclose = () => {
-      if (transport.sessionId) {
-        sessions.delete(transport.sessionId);
-      }
-    };
-
-    session = {
-      transport,
-      server,
-      userId,
-      createdAt: Date.now(),
-    };
-  }
-
-  // Handle the request
-  const webResponse = await session.transport.handleRequest(webRequest);
-
-  // Store session if it has a session ID now
-  if (session.transport.sessionId && !sessions.has(session.transport.sessionId)) {
-    sessions.set(session.transport.sessionId, session);
-  }
-
-  // Convert web standard Response back to Azure Functions response
   return await toAzureResponse(webResponse);
 }
 
@@ -351,19 +283,8 @@ async function toAzureResponse(webRes: Response): Promise<HttpResponseInit> {
     headers[key] = value;
   });
 
-  // Check if this is an SSE response
-  const contentType = webRes.headers.get("content-type");
-  if (contentType?.includes("text/event-stream")) {
-    // Pass the body as a ReadableStream for proper SSE streaming.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- web vs Node.js ReadableStream type mismatch
-    return {
-      status: webRes.status,
-      headers,
-      body: webRes.body as any,
-    };
-  }
-
   // For JSON responses, parse and return
+  const contentType = webRes.headers.get("content-type");
   if (contentType?.includes("application/json")) {
     const jsonBody = await webRes.json();
     return {
@@ -672,7 +593,7 @@ async function handleToken(
 
 // Register Azure Functions
 app.http("mcp", {
-  methods: ["GET", "POST", "DELETE"],
+  methods: ["POST", "DELETE"],
   authLevel: "anonymous", // We handle auth ourselves via OAuth
   route: "mcp",
   handler: handleMCPRequest,
