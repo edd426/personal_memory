@@ -180,14 +180,6 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: 'https://${storageAccount.name}.blob.${az.environment().suffixes.storage}'
         }
         {
-          // Connection string for profile blob storage access.
-          // Takes priority over AZURE_STORAGE_ACCOUNT_URL in createStorage().
-          // Managed identity (AZURE_STORAGE_ACCOUNT_URL) has RBAC assigned but
-          // DefaultAzureCredential fails intermittently in Functions runtime.
-          name: 'AZURE_STORAGE_CONNECTION_STRING'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${az.environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
-        }
-        {
           name: 'ENTRA_TENANT_ID'
           value: entraIdTenantId
         }
