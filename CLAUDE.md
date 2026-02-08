@@ -14,6 +14,7 @@ A personal profile system for Claude sessions with `/me` to load context and `/r
 │  # Goals              - What you're trying to achieve       │
 │  # Learned Facts      - Accumulated knowledge               │
 │  # Pet Peeves         - Things to avoid                     │
+│  # Relationships      - People in your life                 │
 └─────────────────────────────────────────────────────────────┘
            ▲                                    │
            │ /reflect (writes)                  │ /me (reads)
@@ -31,7 +32,7 @@ A personal profile system for Claude sessions with `/me` to load context and `/r
 
 ## Design Decisions (v1)
 
-- **Storage**: Markdown at `~/.claude/me.md` (human-readable, editable)
+- **Storage**: Azure Blob Storage is the source of truth (local `~/.claude/me.md` used only for local-only setups)
 - **Capture**: Explicit `/reflect` only (intentional, not automatic)
 - **Loading**: Explicit `/me` only (user decides when relevant)
 - **Extraction**: LLM proposes, user approves each before saving

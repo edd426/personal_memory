@@ -64,3 +64,11 @@ A personal profile for Claude sessions. Load with `/me`, update with `/reflect`.
 <!-- Things you explicitly don't want, anti-patterns to avoid -->
 
 -
+
+---
+
+## Relationships
+
+<!-- People in your life. Format: **Name** (relationship): fact -->
+
+-

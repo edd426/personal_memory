@@ -8,6 +8,7 @@ const SECTIONS = [
   "Goals",
   "Learned Facts",
   "Pet Peeves",
+  "Relationships",
 ] as const;
 
 export type Section = (typeof SECTIONS)[number];
@@ -78,6 +79,8 @@ Based on the conversation summary above:
 - Identify which section it belongs to: ${SECTIONS.join(", ")}
 - Phrase it concisely (1-2 sentences max)
 - Check it doesn't duplicate existing content
+- For the Relationships section, use format: **Name** (relationship_type): fact about them
+  - Example relationship types: partner, family, friend, colleague, mentor
 
 ### For Proposed Removals:
 - Quote the exact line to remove
@@ -117,6 +120,8 @@ const DEFAULT_TEMPLATE = `# Me
 ## Learned Facts
 
 ## Pet Peeves
+
+## Relationships
 `;
 
 export function createSaveToProfile(storage: ProfileStorage) {

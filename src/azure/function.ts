@@ -98,6 +98,7 @@ function createMCPServerWithUserId(userId: string) {
                   "Goals",
                   "Learned Facts",
                   "Pet Peeves",
+                  "Relationships",
                 ],
                 description: "The profile section to add the content to",
               },
