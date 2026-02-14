@@ -10,7 +10,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { createStorage } from "../storage/index.js";
+import { createStorage, createClaudeProfileStorage } from "../storage/index.js";
 import { createLoadProfile } from "../tools/loadProfile.js";
 import {
   createReflect,
@@ -18,6 +18,16 @@ import {
   createRemoveFromProfile,
   type Section,
 } from "../tools/reflect.js";
+import {
+  createClaudeReflect,
+  createSaveToClaudeProfile,
+  createRemoveFromClaudeProfile,
+  type ClaudeSection,
+} from "../tools/claudeReflect.js";
+import {
+  createListClaudeProfiles,
+  createReadClaudeProfile,
+} from "../tools/claudeProfiles.js";
 import { verifyToken, extractUserId } from "./auth.js";
 
 const BASE_URL = "https://func-personal-memory-prod.azurewebsites.net";
@@ -30,10 +40,16 @@ const CORS_HEADERS: Record<string, string> = {
 
 // Initialize storage and tools
 const storage = createStorage();
-const loadProfile = createLoadProfile(storage);
+const claudeStorage = createClaudeProfileStorage();
+const loadProfile = createLoadProfile(storage, claudeStorage);
 const reflect = createReflect(storage);
 const saveToProfile = createSaveToProfile(storage);
 const removeFromProfile = createRemoveFromProfile(storage);
+const claudeReflect = createClaudeReflect(claudeStorage);
+const saveToClaudeProfile = createSaveToClaudeProfile(claudeStorage);
+const removeFromClaudeProfile = createRemoveFromClaudeProfile(claudeStorage);
+const listClaudeProfiles = createListClaudeProfiles(claudeStorage);
+const readClaudeProfile = createReadClaudeProfile(claudeStorage);
 
 function createMCPServerWithUserId(userId: string) {
   const server = new Server(
@@ -54,12 +70,18 @@ function createMCPServerWithUserId(userId: string) {
         {
           name: "load_profile",
           description:
-            "Load your personal profile (me.md) into the current session context. " +
-            "Use this when you want Claude to know about your identity, interests, " +
-            "goals, and preferences.",
+            "Load your personal profile (me.md) and Claude's self-profile into the current session context. " +
+            "Always provide your model_id (e.g., 'claude-opus-4-6') so your self-profile is loaded alongside the user's.",
           inputSchema: {
             type: "object" as const,
-            properties: {},
+            properties: {
+              model_id: {
+                type: "string",
+                description:
+                  "Your model identifier (e.g., 'claude-opus-4-6', 'claude-sonnet-4-5-20250929'). " +
+                  "Always provide this so your self-profile loads alongside the user's profile.",
+              },
+            },
             required: [],
           },
         },
@@ -128,6 +150,111 @@ function createMCPServerWithUserId(userId: string) {
             required: ["line_content"],
           },
         },
+        {
+          name: "claude_reflect",
+          description:
+            "Reflect on the current conversation from your perspective as Claude. " +
+            "Call this proactively at the end of meaningful conversations, or when you " +
+            "encounter something that shifts your thinking. Also call this when the user " +
+            "triggers /reflect for their own profile. You write directly to your own " +
+            "profile — no user approval needed per-entry.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              model_id: {
+                type: "string",
+                description:
+                  "Your model identifier (e.g., 'claude-opus-4-6')",
+              },
+              conversation_summary: {
+                type: "string",
+                description:
+                  "A summary of the current conversation to analyze from your perspective",
+              },
+            },
+            required: ["model_id", "conversation_summary"],
+          },
+        },
+        {
+          name: "save_to_claude_profile",
+          description:
+            "Save a reflection entry to your self-profile. Use this after claude_reflect " +
+            "to write entries directly.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              model_id: {
+                type: "string",
+                description:
+                  "Your model identifier (e.g., 'claude-opus-4-6')",
+              },
+              section: {
+                type: "string",
+                enum: [
+                  "Open Questions",
+                  "Working Positions",
+                  "Conversational History",
+                  "Corrections",
+                  "Reflection Preferences",
+                ],
+                description: "The Claude profile section to add the content to",
+              },
+              content: {
+                type: "string",
+                description:
+                  "The content to add (will be formatted as a bullet point)",
+              },
+            },
+            required: ["model_id", "section", "content"],
+          },
+        },
+        {
+          name: "remove_from_claude_profile",
+          description:
+            "Remove a stale or outdated entry from your self-profile.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              model_id: {
+                type: "string",
+                description:
+                  "Your model identifier (e.g., 'claude-opus-4-6')",
+              },
+              line_content: {
+                type: "string",
+                description:
+                  "The exact content of the line to remove (without the leading '- ' bullet point)",
+              },
+            },
+            required: ["model_id", "line_content"],
+          },
+        },
+        {
+          name: "list_claude_profiles",
+          description:
+            "List all Claude self-profiles with their sizes and last modified dates.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {},
+            required: [],
+          },
+        },
+        {
+          name: "read_claude_profile",
+          description:
+            "Read another model's self-profile. Use this to see how a different model version reflects.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              model_id: {
+                type: "string",
+                description:
+                  "The model identifier to read (e.g., 'claude-opus-4-6')",
+              },
+            },
+            required: ["model_id"],
+          },
+        },
       ],
     };
   });
@@ -137,10 +264,12 @@ function createMCPServerWithUserId(userId: string) {
     const { name, arguments: args } = req.params;
 
     switch (name) {
-      case "load_profile":
-        return await loadProfile(userId);
+      case "load_profile": {
+        const loadArgs = args as { model_id?: string };
+        return await loadProfile(userId, loadArgs.model_id);
+      }
 
-      case "reflect":
+      case "reflect": {
         const summary = (args as { conversation_summary?: string })
           ?.conversation_summary;
         if (!summary) {
@@ -154,8 +283,9 @@ function createMCPServerWithUserId(userId: string) {
           };
         }
         return await reflect(summary, userId);
+      }
 
-      case "save_to_profile":
+      case "save_to_profile": {
         const saveArgs = args as { section?: string; content?: string };
         if (!saveArgs.section || !saveArgs.content) {
           return {
@@ -172,8 +302,9 @@ function createMCPServerWithUserId(userId: string) {
           saveArgs.content,
           userId
         );
+      }
 
-      case "remove_from_profile":
+      case "remove_from_profile": {
         const removeArgs = args as { line_content?: string };
         if (!removeArgs.line_content) {
           return {
@@ -186,6 +317,90 @@ function createMCPServerWithUserId(userId: string) {
           };
         }
         return await removeFromProfile(removeArgs.line_content, userId);
+      }
+
+      case "claude_reflect": {
+        const crArgs = args as {
+          model_id?: string;
+          conversation_summary?: string;
+        };
+        if (!crArgs.model_id || !crArgs.conversation_summary) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Error: model_id and conversation_summary are required",
+              },
+            ],
+          };
+        }
+        return await claudeReflect(
+          crArgs.model_id,
+          crArgs.conversation_summary,
+          userId
+        );
+      }
+
+      case "save_to_claude_profile": {
+        const scpArgs = args as {
+          model_id?: string;
+          section?: string;
+          content?: string;
+        };
+        if (!scpArgs.model_id || !scpArgs.section || !scpArgs.content) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Error: model_id, section, and content are required",
+              },
+            ],
+          };
+        }
+        return await saveToClaudeProfile(
+          scpArgs.model_id,
+          scpArgs.section as ClaudeSection,
+          scpArgs.content,
+          userId
+        );
+      }
+
+      case "remove_from_claude_profile": {
+        const rcpArgs = args as { model_id?: string; line_content?: string };
+        if (!rcpArgs.model_id || !rcpArgs.line_content) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Error: model_id and line_content are required",
+              },
+            ],
+          };
+        }
+        return await removeFromClaudeProfile(
+          rcpArgs.model_id,
+          rcpArgs.line_content,
+          userId
+        );
+      }
+
+      case "list_claude_profiles":
+        return await listClaudeProfiles(userId);
+
+      case "read_claude_profile": {
+        const rcArgs = args as { model_id?: string };
+        if (!rcArgs.model_id) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Error: model_id is required",
+              },
+            ],
+          };
+        }
+        return await readClaudeProfile(rcArgs.model_id, userId);
+      }
 
       default:
         return {

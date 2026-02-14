@@ -7,11 +7,18 @@ Future phases and features for the personal memory system.
 ## Current State
 
 **Implemented**:
-- MCP server with 4 tools (`load_profile`, `reflect`, `save_to_profile`, `remove_from_profile`)
-- Markdown profile stored in Azure Blob Storage (`profiles/{userId}/me.md`)
-- 6 sections: Identity, Current Focus, Interests, Goals, Learned Facts, Pet Peeves
-- Manual `/me` to load, `/reflect` to save
-- LLM proposes additions AND removals, user approves each
+- MCP server with 9 tools (4 user profile + 5 Claude self-profile)
+- User profile tools: `load_profile`, `reflect`, `save_to_profile`, `remove_from_profile`
+- Claude self-profile tools: `claude_reflect`, `save_to_claude_profile`, `remove_from_claude_profile`, `list_claude_profiles`, `read_claude_profile`
+- User profile stored in Azure Blob Storage (`profiles/{userId}/me.md`)
+- Claude profiles stored per-model (`profiles/{userId}/claude/{modelId}.md`)
+- 7 user profile sections: Identity, Current Focus, Interests, Goals, Learned Facts, Pet Peeves, Relationships
+- 5 Claude profile sections: Open Questions, Working Positions, Conversational History, Corrections, Reflection Preferences
+- Manual `/me` to load (loads both profiles when model_id provided), `/reflect` to save
+- LLM proposes additions AND removals to user profile, user approves each
+- Claude self-reflects autonomously — no per-entry user approval
+- Per-model profiles: each model version starts fresh, can read other models' profiles
+- Hybrid reflection prompt: hardcoded defaults + model-shaped Reflection Preferences
 - **Cloud deployment**: Azure Functions + Blob Storage with OAuth proxy to Entra ID
 - **Claude.ai connector**: Custom connector with DCR (RFC 7591), OAuth authorization code flow
 - **Claude Code**: Stdio server with Azure Blob Storage backend via `DefaultAzureCredential`
@@ -19,10 +26,12 @@ Future phases and features for the personal memory system.
 - Blob versioning enabled (automatic version history on every write)
 
 **Design Decisions**:
-- Explicit commands only (no auto-capture)
-- No metadata/timestamps
+- Explicit commands only for user profile (no auto-capture)
+- Claude self-reflects autonomously (proactive, no user approval per-entry)
+- No metadata/timestamps on user profile
+- Inline dates on Claude profile Conversational History and Corrections
 - Manual pruning (no decay)
-- Single profile per user (multi-tenant via Entra ID OID)
+- Per-model Claude profiles (multi-tenant via Entra ID OID)
 
 **Architecture**:
 ```

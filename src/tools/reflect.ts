@@ -24,7 +24,7 @@ export function createReflect(storage: ProfileStorage) {
               type: "text" as const,
               text:
                 `No profile found at ${storage.getLocation(userId)}\n\n` +
-                "Please create a profile first by copying templates/me.md to ~/.claude/me.md",
+                "Please create a profile first. Use /reflect after a conversation to start building one.",
             },
           ],
         };

@@ -303,7 +303,7 @@ Load personal profile into the current session.
 
 ## Behavior
 
-Call `mcp__personal-memory__load_profile` to load ~/.claude/me.md
+Call `mcp__personal-memory__load_profile` to load your profile
 
 ## Usage
 

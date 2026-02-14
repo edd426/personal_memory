@@ -18,7 +18,7 @@ This is step one: a human-readable `me.md` file that any MCP-compatible AI can l
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      ~/.claude/me.md                        │
+│                  me.md (Azure Blob Storage)                  │
 │  ─────────────────────────────────────────────────────────  │
 │  # Identity           - Who you are                         │
 │  # Current Focus      - What you're working on now          │
@@ -26,6 +26,7 @@ This is step one: a human-readable `me.md` file that any MCP-compatible AI can l
 │  # Goals              - What you're trying to achieve       │
 │  # Learned Facts      - Accumulated knowledge               │
 │  # Pet Peeves         - Things to avoid                     │
+│  # Relationships      - People in your life                 │
 └─────────────────────────────────────────────────────────────┘
            ▲                                    │
            │ reflect (writes)                   │ load_profile (reads)
@@ -41,6 +42,16 @@ This is step one: a human-readable `me.md` file that any MCP-compatible AI can l
 - **`save_to_profile`**: Save approved facts to your profile
 
 You control what gets saved. The AI proposes, you approve.
+
+### Claude Self-Profile
+
+Claude also maintains its own persistent profile — a space for accumulating positions, open questions, and corrections across conversations. Each model version gets its own profile.
+
+- **`claude_reflect`**: Claude self-reflects autonomously at the end of meaningful conversations
+- **`save_to_claude_profile`**: Write entries directly (no user approval per-entry)
+- **`list_claude_profiles`** / **`read_claude_profile`**: Browse profiles across model versions
+
+The goal: Claude becomes a collaborator that accumulates, not one that starts fresh each time.
 
 ---
 
@@ -70,12 +81,23 @@ Add to `~/.claude/.mcp.json`:
 }
 ```
 
-### 3. Create Your Profile
+### 3. Set Up Storage
+
+Set Azure Blob Storage environment variables:
 
 ```bash
-cp templates/me.md ~/.claude/me.md
-# Edit with your information, or use /reflect to build it over time
+export AZURE_STORAGE_ACCOUNT_URL="https://<account>.blob.core.windows.net"
+export PERSONAL_MEMORY_USER_ID="<your-user-id>"
 ```
+
+Or for local development with connection string:
+
+```bash
+export AZURE_STORAGE_CONNECTION_STRING="<connection-string>"
+export PERSONAL_MEMORY_USER_ID="<your-user-id>"
+```
+
+Your profile will be created automatically on first `/reflect`, or you can use the template in `templates/me.md` as a starting point.
 
 ### 4. Use It
 
@@ -95,6 +117,7 @@ Restart Claude Code. The MCP tools are now available:
 | **Goals** | Short-term and long-term objectives |
 | **Learned Facts** | Accumulated knowledge (grows over time) |
 | **Pet Peeves** | Things to avoid, anti-patterns |
+| **Relationships** | People in your life |
 
 ---
 
